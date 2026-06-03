@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Pisalkin — Messenger</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        :root{--bg:#0a0a0a;--surface:#1c1c1e;--elem:#2c2c2e;--hover:#2c2c2e;--text:#fff;--text-sec:#8e8e93;--border:#2c2c2e;--mine:#3e7bff;--other:#1c1c1e}
+        body.light{--bg:#fff;--surface:#f5f5f5;--elem:#e5e5ea;--hover:#e5e5ea;--text:#000;--text-sec:#8e8e93;--border:#e5e5ea;--mine:#3e7bff;--other:#e5e5ea}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden}
+        .toast{position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--text);padding:8px 20px;border-radius:30px;z-index:1100;font-size:14px;animation:fadeIn 0.2s}
+        @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+        .loading-spinner{width:40px;height:40px;border:2px solid var(--elem);border-top-color:#3e7bff;border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .fab,.icon-btn,.send-btn,.lang-btn{transition:all 0.1s ease;cursor:pointer}
+        .fab:active,.icon-btn:active,.send-btn:active,.lang-btn:active{transform:scale(0.96)}
+        .dialog-item:hover,.user-info:hover{background:var(--hover)}
+        input,textarea{background:var(--elem);border:none;border-radius:24px;padding:12px 16px;color:var(--text);font-size:14px;width:100%}
+        input:focus,textarea:focus{outline:none;background:var(--hover)}
+        button{background:#3e7bff;border:none;border-radius:24px;padding:12px;color:#fff;font-weight:600;cursor:pointer}
+        button:active{transform:scale(0.98)}
+        .auth-container{display:flex;align-items:center;justify-content:center;height:100vh;padding:20px}
+        .auth-card{background:var(--surface);border-radius:28px;padding:32px;width:100%;max-width:400px}
+        .auth-card h1{font-size:28px;font-weight:700;color:#3e7bff;text-align:center}
+        .auth-card p{text-align:center;color:var(--text-sec);margin:8px 0 24px}
+        .auth-card input{margin-bottom:12px}
+        .auth-card button{width:100%;margin-top:8px}
+        .auth-card .secondary-btn{background:var(--elem);color:var(--text)}
+        .app{display:flex;height:100%;width:100%;display:none}
+        .app.visible{display:flex}
+        .sidebar{width:360px;background:var(--surface);border-right:0.5px solid var(--border);display:flex;flex-direction:column;position:relative}
+        .sidebar-header{padding:16px;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+        .sidebar-header h1{font-size:24px;font-weight:700;color:#3e7bff}
+        .user-info{display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 12px;border-radius:30px}
+        .user-avatar-small{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#3e7bff}
+        .search-box{padding:8px 16px;border-bottom:0.5px solid var(--border)}
+        .dialogs-list{flex:1;overflow-y:auto}
+        .dialog-item{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-radius:12px;margin:0 8px}
+        .dialog-avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;background:#3e7bff}
+        .dialog-info{flex:1}
+        .dialog-name{font-size:15px;font-weight:500}
+        .dialog-last-message{font-size:12px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+        .fab{position:absolute;bottom:80px;right:20px;width:52px;height:52px;border-radius:50%;background:#3e7bff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-size:28px;font-weight:bold}
+        .lang-btn{position:absolute;bottom:20px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--elem);display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.3);font-size:20px;font-weight:bold;border:1px solid var(--border)}
+        .chat-panel{flex:1;display:flex;flex-direction:column;background:var(--bg)}
+        .chat-header{background:var(--surface);padding:12px 20px;display:flex;align-items:center;gap:16px;border-bottom:0.5px solid var(--border)}
+        .chat-header-avatar{width:44px;height:44px;border-radius:50%;object-fit:cover;background:#3e7bff}
+        .chat-header-info{flex:1}
+        .chat-header-name{font-size:17px;font-weight:600}
+        .chat-header-type{font-size:12px;color:var(--text-sec)}
+        .chat-header-actions{display:flex;gap:8px}
+        .icon-btn{background:none;border:none;color:var(--text-sec);cursor:pointer;padding:6px;border-radius:50%;width:34px;height:34px}
+        .icon-btn.danger{color:#ff3b30}
+        .messages-container{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:8px}
+        .private-message{display:flex;flex-direction:column;max-width:80%;margin-bottom:8px}
+        .private-message.my-message{align-self:flex-end}
+        .private-message.my-message .message-bubble{background:var(--mine);border-bottom-right-radius:4px;color:#fff}
+        .private-message.other-message{align-self:flex-start}
+        .private-message.other-message .message-bubble{background:var(--other);border-bottom-left-radius:4px}
+        .message-row{display:flex;gap:8px;align-items:flex-end}
+        .private-message.my-message .message-row{flex-direction:row-reverse}
+        .private-message.my-message .message-avatar{display:none}
+        .message-avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#3e7bff}
+        .message-bubble{padding:8px 12px;border-radius:18px}
+        .message-text{font-size:14px;word-wrap:break-word}
+        .message-date{font-size:10px;color:var(--text-sec);margin-top:4px;text-align:right}
+        .input-area{background:var(--surface);padding:12px 20px;border-top:0.5px solid var(--border)}
+        .input-wrapper{display:flex;align-items:center;gap:12px;background:var(--elem);border-radius:28px;padding:6px 16px}
+        .input-wrapper input{flex:1;background:none;padding:10px 0}
+        .send-btn{background:#3e7bff;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff}
+        .empty-state{text-align:center;padding:60px 20px;color:var(--text-sec)}
+        .profile-modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:2000;display:none;align-items:center;justify-content:center}
+        .profile-modal-overlay.active{display:flex}
+        .profile-card{background:var(--surface);border-radius:28px;width:420px;max-width:90%;max-height:85vh;overflow-y:auto}
+        .profile-cover{height:120px;background:linear-gradient(135deg,#3e7bff,#8b5cf6);border-radius:28px 28px 0 0}
+        .profile-avatar-large{width:100px;height:100px;border-radius:50%;object-fit:cover;margin-top:-50px;margin-left:24px;border:4px solid var(--surface);cursor:pointer;background:#3e7bff}
+        .profile-info{padding:16px 24px 24px}
+        .profile-name-large{font-size:22px;font-weight:700}
+        .profile-username{font-size:14px;color:var(--text-sec);margin-bottom:12px}
+        .profile-bio{font-size:14px;margin-bottom:20px}
+        .profile-tabs{display:flex;gap:4px;border-top:0.5px solid var(--border);padding-top:16px;margin-bottom:16px}
+        .profile-tab{flex:1;text-align:center;padding:8px;font-size:14px;color:var(--text-sec);cursor:pointer;border-radius:10px}
+        .profile-tab.active{color:#3e7bff;background:var(--elem)}
+        .profile-field{background:var(--elem);border-radius:14px;margin:16px 0}
+        .profile-field-label{font-size:13px;color:var(--text-sec);padding:12px 16px 4px}
+        .profile-field-input{width:100%;background:none;border:none;padding:4px 16px 12px;font-size:17px;color:var(--text);outline:none}
+        .profile-actions button{width:100%;margin-top:8px}
+        .btn-danger{background:#ff3b30;color:#fff}
+        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.9);z-index:1000;align-items:center;justify-content:center}
+        .modal.active{display:flex}
+        .modal-content{background:var(--surface);border-radius:24px;padding:24px;width:360px;max-width:90%;text-align:center}
+        .modal-content h3{margin-bottom:16px}
+        .modal-content input,.modal-content textarea{margin-bottom:12px}
+        .progress-bar{position:fixed;top:0;left:0;width:100%;height:2px;background:rgba(62,123,255,0.2);z-index:2000;display:none}
+        .progress-fill{height:100%;background:#3e7bff;width:0;transition:width .3s}
+        @media(max-width:700px){
+            .sidebar{position:fixed;left:0;top:0;height:100%;transform:translateX(-100%);z-index:200;width:85%}
+            .sidebar.open{transform:translateX(0)}
+            .private-message{max-width:90%}
+        }
+    </style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+<div id="authContainer" class="auth-container">
+    <div id="loginScreen" class="auth-card">
+        <h1>Pisalkin</h1>
+        <p>Войдите в аккаунт</p>
+        <input type="text" id="loginUsername" placeholder="Username">
+        <input type="password" id="loginPassword" placeholder="Password">
+        <button onclick="login()">Войти</button>
+        <button class="secondary-btn" onclick="showRegister()">Создать аккаунт</button>
+    </div>
+    <div id="registerScreen" class="auth-card" style="display:none">
+        <h1>Pisalkin</h1>
+        <p>Создать новый аккаунт</p>
+        <input type="text" id="regUsername" placeholder="Username">
+        <input type="password" id="regPassword" placeholder="Password">
+        <button onclick="register()">Зарегистрироваться</button>
+        <button class="secondary-btn" onclick="showLogin()">Назад</button>
+    </div>
+</div>
+<div id="mainApp" class="app">
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h1>Pisalkin</h1>
+            <div class="user-info" onclick="openMyProfile()">
+                <img class="user-avatar-small" id="avatar" src="">
+                <span id="username"></span>
+            </div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Поиск пользователей..." oninput="onSearch()">
+        </div>
+        <div class="dialogs-list" id="dialogsList"></div>
+        <button class="fab" onclick="openCreateChannel()">+</button>
+        <button class="lang-btn" onclick="toggleLanguage()" id="langBtn">EN</button>
+    </div>
+    <div class="chat-panel" id="chatPanel">
+        <div class="empty-state">Выберите диалог</div>
+    </div>
+</div>
+<div id="profileModalOverlay" class="profile-modal-overlay">
+    <div class="profile-card">
+        <div class="profile-cover"></div>
+        <img id="profileAvatarLarge" class="profile-avatar-large" src="" onclick="document.getElementById('avatarInputFull').click()">
+        <div class="profile-info">
+            <div class="profile-name-large" id="profileDisplayName"></div>
+            <div class="profile-username" id="profileUsername"></div>
+            <div class="profile-bio" id="profileBio">Нет био</div>
+            <input type="file" id="avatarInputFull" accept="image/*" style="display:none" onchange="uploadAvatarFull()">
+            <div class="profile-tabs">
+                <div class="profile-tab active" onclick="switchProfileTab('info')">Информация</div>
+                <div class="profile-tab" onclick="switchProfileTab('settings')">Настройки</div>
+            </div>
+            <div id="profileTabInfo">
+                <div class="profile-field">
+                    <div class="profile-field-label">Отображаемое имя</div>
+                    <input type="text" id="displayNameInputFull" class="profile-field-input">
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">О себе</div>
+                    <textarea id="bioInputFull" class="profile-field-input" rows="3"></textarea>
+                </div>
+            </div>
+            <div id="profileTabSettings" style="display:none">
+                <div class="profile-field">
+                    <div class="profile-field-label">Имя пользователя</div>
+                    <input type="text" id="usernameDisplayFull" class="profile-field-input" readonly disabled>
+                </div>
+                <div class="profile-field">
+                    <div class="profile-field-label">Новый пароль</div>
+                    <input type="password" id="newPasswordInputFull" class="profile-field-input" placeholder="Новый пароль">
+                </div>
+                <button class="btn-secondary" onclick="toggleTheme()">🌙 Тёмная / Светлая</button>
+                <button class="btn-primary" onclick="saveProfileFull()">Сохранить</button>
+                <button class="btn-danger" onclick="deleteAccountFull()">Удалить аккаунт</button>
+                <button class="btn-danger" onclick="logout()">Выйти</button>
+            </div>
+        </div>
+        <div class="profile-actions">
+            <button class="btn-secondary" onclick="closeProfileModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+<div id="createChannelModal" class="modal">
+    <div class="modal-content">
+        <h3>Создать канал</h3>
+        <input type="text" id="channelName" placeholder="Название канала">
+        <input type="text" id="channelUsername" placeholder="@username">
+        <textarea id="channelDesc" placeholder="Описание" rows="2"></textarea>
+        <button onclick="createChannel()">Создать</button>
+        <button class="close" onclick="closeCreateChannel()">Отмена</button>
+    </div>
+</div>
+<div id="fullscreenModal" class="modal" onclick="closeFullscreen()">
+    <img id="fullscreenImage" style="display:none;max-width:90%;max-height:90%;border-radius:12px">
+    <video id="fullscreenVideo" style="display:none;max-width:90%;max-height:90%" controls autoplay></video>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://msrywrqdsrgongrrtibt.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1zcnl3cnFkc3Jnb25ncnJ0aWJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAwMjM1OTQsImV4cCI6MjA5NTU5OTU5NH0.Tr5a1E5VW92zaI_day97q3IqyagiJE3ptnKeM2vQI4k';
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    realtime: { params: { eventsPerSecond: 10 } }
+});
+
+let currentUser = null;
+let currentDialog = null;
+let subscriptions = [];
+let currentLang = localStorage.getItem('language') || 'ru';
+
+const translations = {
+    ru: {
+        emptyStateMsg: 'Выберите диалог', searchPlaceholder: 'Поиск пользователей...',
+        user: 'Пользователь', writeMessage: 'Напишите сообщение...', messageSent: '✓ Отправлено!',
+        failedToSend: '❌ Ошибка отправки', newMessageFrom: '📨 Новое сообщение от {name}',
+        deleteChatConfirm: 'Удалить этот чат?', chatDeleted: '✅ Чат удалён', startChat: 'Начать чат',
+        noDialogs: 'Нет диалогов. Найдите пользователей в поиске!', nothingFound: 'Ничего не найдено'
+    },
+    en: {
+        emptyStateMsg: 'Select a dialog', searchPlaceholder: 'Search users...',
+        user: 'User', writeMessage: 'Write a message...', messageSent: '✓ Sent!',
+        failedToSend: '❌ Failed to send', newMessageFrom: '📨 New message from {name}',
+        deleteChatConfirm: 'Delete this chat?', chatDeleted: '✅ Chat deleted', startChat: 'Start chat',
+        noDialogs: 'No dialogs. Search for users above!', nothingFound: 'Nothing found'
+    }
+};
+
+function updateUILanguage() {
+    const t = translations[currentLang];
+    document.getElementById('emptyStateMsg') && (document.getElementById('emptyStateMsg').innerText = t.emptyStateMsg);
+    document.getElementById('searchInput') && (document.getElementById('searchInput').placeholder = t.searchPlaceholder);
+    document.getElementById('langBtn') && (document.getElementById('langBtn').innerText = currentLang === 'ru' ? 'EN' : 'RU');
+}
+
+function toggleLanguage() {
+    currentLang = currentLang === 'ru' ? 'en' : 'ru';
+    localStorage.setItem('language', currentLang);
+    updateUILanguage();
+    showToast(currentLang === 'ru' ? '🌐 Язык: Русский' : '🌐 Language: English');
+}
+
+function getAvatarUrl(url, name) {
+    if (url && url.startsWith('http')) return url;
+    const letter = name && name.length > 0 ? name.charAt(0).toUpperCase() : 'U';
+    return `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233e7bff'/%3E%3Ctext x='50' y='67' font-size='45' text-anchor='middle' fill='white' font-weight='bold'%3E${letter}%3C/text%3E%3C/svg%3E`;
+}
+
+function escapeHtml(s) { if (!s) return ''; return s.replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : '&gt;'); }
+
+function showToast(msg) {
+    let t = document.createElement('div');
+    t.className = 'toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+}
+
+function showProgress(p) {
+    let bar = document.getElementById('progressBar'), fill = document.getElementById('progressFill');
+    bar.style.display = 'block';
+    fill.style.width = p + '%';
+    if (p >= 100) setTimeout(() => { bar.style.display = 'none'; fill.style.width = '0%'; }, 500);
+}
+
+function showLogin() { document.getElementById('loginScreen').style.display = 'block'; document.getElementById('registerScreen').style.display = 'none'; }
+function showRegister() { document.getElementById('loginScreen').style.display = 'none'; document.getElementById('registerScreen').style.display = 'block'; }
+
+async function register() {
+    let username = document.getElementById('regUsername').value.trim();
+    let password = document.getElementById('regPassword').value.trim();
+    if (!username || username.length < 3) { showToast('Имя минимум 3 символа'); return; }
+    if (!password || password.length < 6) { showToast('Пароль минимум 6 символов'); return; }
+    showProgress(30);
+    try {
+        let { data: exist } = await sb.from('users_auth').select('username').eq('username', username).maybeSingle();
+        if (exist) { showToast('Имя занято'); showProgress(100); return; }
+        let userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
+        await sb.from('users_auth').insert([{ user_id: userId, username: username, password: password }]);
+        await sb.from('users').insert([{ user_id: userId, username: username, avatar_url: null, bio: null }]);
+        showProgress(100);
+        showToast('✅ Регистрация успешна! Войдите');
+        showLogin();
+        document.getElementById('loginUsername').value = username;
+    } catch (e) { showToast('Ошибка: ' + e.message); showProgress(100); }
+}
+
+async function login() {
+    let username = document.getElementById('loginUsername').value.trim();
+    let password = document.getElementById('loginPassword').value.trim();
+    if (!username || !password) { showToast('Введите имя и пароль'); return; }
+    showProgress(30);
+    try {
+        let { data: user } = await sb.from('users_auth').select('*').eq('username', username).eq('password', password).maybeSingle();
+        if (!user) { showToast('Неверное имя или пароль'); showProgress(100); return; }
+        await completeLogin(user);
+        showProgress(100);
+    } catch (e) { showToast('Ошибка: ' + e.message); showProgress(100); }
+}
+
+async function completeLogin(user) {
+    let { data: profile } = await sb.from('users').select('*').eq('user_id', user.user_id).single();
+    currentUser = {
+        id: user.user_id,
+        username: user.username,
+        displayName: profile?.username || user.username,
+        avatar: profile?.avatar_url || null,
+        bio: profile?.bio || null
+    };
+    localStorage.setItem('xschat_user_id', currentUser.id);
+    document.getElementById('authContainer').style.display = 'none';
+    document.getElementById('mainApp').classList.add('visible');
+    document.getElementById('username').innerText = currentUser.displayName;
+    document.getElementById('avatar').src = getAvatarUrl(currentUser.avatar, currentUser.displayName);
+    initTheme();
+    await loadDialogs();
+    setupRealtime();
+    showToast('Добро пожаловать, ' + currentUser.displayName + '!');
+}
+
+function logout() { localStorage.removeItem('xschat_user_id'); location.reload(); }
+
+function toggleTheme() {
+    if (document.body.classList.contains('light')) {
+        document.body.classList.remove('light');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        document.body.classList.add('light');
+        localStorage.setItem('theme', 'light');
+    }
+}
+
+function initTheme() {
+    if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+    else document.body.classList.remove('light');
+}
+
+function switchProfileTab(tab) {
+    let info = document.getElementById('profileTabInfo'), set = document.getElementById('profileTabSettings');
+    let tabs = document.querySelectorAll('#profileModalOverlay .profile-tab');
+    if (tab === 'info') {
+        info.style.display = 'block'; set.style.display = 'none';
+        tabs[0].classList.add('active'); tabs[1].classList.remove('active');
+    } else {
+        info.style.display = 'none'; set.style.display = 'block';
+        tabs[0].classList.remove('active'); tabs[1].classList.add('active');
+    }
+}
+
+async function openMyProfile() {
+    let { data: p } = await sb.from('users').select('*').eq('user_id', currentUser.id).single();
+    currentUser.bio = p?.bio || '';
+    document.getElementById('profileAvatarLarge').src = getAvatarUrl(currentUser.avatar, currentUser.displayName);
+    document.getElementById('profileDisplayName').innerText = currentUser.displayName;
+    document.getElementById('profileUsername').innerText = '@' + currentUser.username;
+    document.getElementById('profileBio').innerText = currentUser.bio || 'Нет био';
+    document.getElementById('displayNameInputFull').value = currentUser.displayName;
+    document.getElementById('bioInputFull').value = currentUser.bio || '';
+    document.getElementById('usernameDisplayFull').value = currentUser.username;
+    document.getElementById('newPasswordInputFull').value = '';
+    document.getElementById('profileModalOverlay').classList.add('active');
+}
+
+function closeProfileModal() { document.getElementById('profileModalOverlay').classList.remove('active'); }
+
+async function uploadAvatarFull() {
+    let f = document.getElementById('avatarInputFull').files[0];
+    if (!f) return;
+    showProgress(30);
+    let fn = `avatars/${currentUser.id}_${Date.now()}.${f.name.split('.').pop()}`;
+    await sb.storage.from('media').upload(fn, f);
+    let { data: ud } = sb.storage.from('media').getPublicUrl(fn);
+    currentUser.avatar = ud.publicUrl;
+    await sb.from('users').update({ avatar_url: currentUser.avatar }).eq('user_id', currentUser.id);
+    document.getElementById('profileAvatarLarge').src = currentUser.avatar;
+    document.getElementById('avatar').src = currentUser.avatar;
+    showProgress(100);
+    showToast('Аватар обновлён');
+}
+
+async function saveProfileFull() {
+    let newName = document.getElementById('displayNameInputFull').value.trim();
+    let newBio = document.getElementById('bioInputFull').value.trim();
+    let newPwd = document.getElementById('newPasswordInputFull').value.trim();
+    if (newName && newName !== currentUser.displayName) {
+        await sb.from('users').update({ username: newName }).eq('user_id', currentUser.id);
+        currentUser.displayName = newName;
+        document.getElementById('username').innerText = newName;
+    }
+    if (newBio !== currentUser.bio) {
+        await sb.from('users').update({ bio: newBio }).eq('user_id', currentUser.id);
+        currentUser.bio = newBio;
+    }
+    if (newPwd && newPwd.length >= 6) {
+        await sb.from('users_auth').update({ password: newPwd }).eq('user_id', currentUser.id);
+        showToast('Пароль изменён');
+    }
+    closeProfileModal();
+    showToast('Профиль сохранён');
+}
+
+async function deleteAccountFull() {
+    if (!confirm('Удалить аккаунт навсегда?')) return;
+    await sb.from('users').delete().eq('user_id', currentUser.id);
+    await sb.from('users_auth').delete().eq('user_id', currentUser.id);
+    localStorage.clear();
+    showToast('Аккаунт удалён');
+    setTimeout(() => location.reload(), 1500);
+}
+
+async function deleteChat(userId, userName) {
+    if (!confirm(translations[currentLang].deleteChatConfirm)) return;
+    showProgress(30);
+    try {
+        await sb.from('private_messages').delete().or(`and(from_user_id.eq.${currentUser.id},to_user_id.eq.${userId}),and(from_user_id.eq.${userId},to_user_id.eq.${currentUser.id})`);
+        showProgress(100);
+        showToast(translations[currentLang].chatDeleted);
+        if (currentDialog?.type === 'user' && currentDialog?.id === userId) {
+            document.getElementById('chatPanel').innerHTML = '<div class="empty-state">' + translations[currentLang].emptyStateMsg + '</div>';
+            currentDialog = null;
+        }
+        await loadDialogs();
+    } catch (e) { showToast('Ошибка'); showProgress(100); }
+}
+
+function setupRealtime() {
+    if (subscriptions.length) {
+        subscriptions.forEach(s => { try { sb.removeChannel(s) } catch (e) { } });
+        subscriptions = [];
+    }
+    try {
+        let ch = sb.channel('realtime-messages');
+        ch.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'private_messages' }, async (p) => {
+            let msg = p.new;
+            let otherId = msg.from_user_id === currentUser.id ? msg.to_user_id : msg.from_user_id;
+            if (currentDialog?.type === 'user' && currentDialog?.id === otherId) {
+                addMessageToChat(msg);
+            } else {
+                let senderName = msg.from_user_id === currentUser.id ? 'Вы' : msg.from_user_id.slice(0, 8);
+                showToast(translations[currentLang].newMessageFrom.replace('{name}', senderName));
+                loadDialogs();
+            }
+        });
+        ch.subscribe();
+        subscriptions.push(ch);
+    } catch (e) { console.warn('Realtime error:', e); }
+}
+
+function addMessageToChat(msg) {
+    let container = document.getElementById('messagesContainer');
+    if (!container) return;
+    let isMy = msg.from_user_id === currentUser.id;
+    let time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    let html = `
+        <div class="private-message ${isMy ? 'my-message' : 'other-message'}">
+            <div class="message-row">
+                ${!isMy ? `<img class="message-avatar" src="${getAvatarUrl(currentDialog?.avatar, currentDialog?.name)}">` : ''}
+                <div class="message-bubble">
+                    <div class="message-text">${escapeHtml(msg.content)}</div>
+                    <div class="message-date">${time}</div>
+                </div>
+                ${isMy ? `<img class="message-avatar" src="${getAvatarUrl(currentUser.avatar, currentUser.displayName)}">` : ''}
+            </div>
+        </div>
+    `;
+    container.insertAdjacentHTML('beforeend', html);
+    container.scrollTop = container.scrollHeight;
+}
+
+async function loadPrivateMessages(uid) {
+    let { data } = await sb.from('private_messages').select('*').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${uid}`).order('created_at', { ascending: true });
+    return data || [];
+}
+
+async function loadDialogs() {
+    let c = document.getElementById('dialogsList');
+    if (!c) return;
+    c.innerHTML = '<div class="empty-state"><div class="loading-spinner"></div></div>';
+    try {
+        let priv = await sb.from('private_messages').select('from_user_id,to_user_id,content,created_at').or(`from_user_id.eq.${currentUser.id},to_user_id.eq.${currentUser.id}`).order('created_at', { ascending: false });
+        let userMessages = new Map();
+        priv.data?.forEach(m => {
+            let otherId = m.from_user_id === currentUser.id ? m.to_user_id : m.from_user_id;
+            if (!userMessages.has(otherId) || new Date(m.created_at) > new Date(userMessages.get(otherId).created_at)) {
+                userMessages.set(otherId, { content: m.content, created_at: m.created_at });
+            }
+        });
+        let dialogs = [];
+        if (userMessages.size > 0) {
+            let { data: users } = await sb.from('users').select('user_id,username,avatar_url').in('user_id', Array.from(userMessages.keys()));
+            for (let u of users || []) {
+                let lastMsg = userMessages.get(u.user_id);
+                dialogs.push({ id: u.user_id, name: u.username, avatar: u.avatar_url, lastMessage: lastMsg?.content?.substring(0, 30) || 'Новый чат' });
+            }
+        }
+        if (dialogs.length === 0) { c.innerHTML = '<div class="empty-state">' + translations[currentLang].noDialogs + '</div>'; return; }
+        let html = '';
+        dialogs.forEach(d => {
+            let av = getAvatarUrl(d.avatar, d.name);
+            html += `<div class="dialog-item" onclick="openPrivateChat('${d.id}','${escapeHtml(d.name)}')"><img class="dialog-avatar" src="${av}"><div class="dialog-info"><div class="dialog-name">${escapeHtml(d.name)}</div><div class="dialog-last-message">${escapeHtml(d.lastMessage)}</div></div></div>`;
+        });
+        c.innerHTML = html;
+    } catch (e) { c.innerHTML = '<div class="empty-state">Ошибка: ' + e.message + '</div>'; }
+}
+
+async function onSearch() {
+    let q = document.getElementById('searchInput').value.trim();
+    if (q.length < 2) { loadDialogs(); return; }
+    try {
+        let { data: users } = await sb.from('users').select('user_id,username,avatar_url').ilike('username', `%${q}%`).neq('user_id', currentUser.id).limit(20);
+        let html = '';
+        if (users?.length) {
+            html += '<div style="padding:12px 16px 4px 16px;font-size:12px;color:var(--text-sec)">👥 Пользователи</div>';
+            for (let u of users) {
+                let av = getAvatarUrl(u.avatar_url, u.username);
+                html += `<div class="dialog-item" onclick="openPrivateChat('${u.user_id}','${escapeHtml(u.username)}')"><img class="dialog-avatar" src="${av}"><div class="dialog-info"><div class="dialog-name">${escapeHtml(u.username)}</div><div class="dialog-last-message">${translations[currentLang].startChat}</div></div></div>`;
+            }
+        }
+        if (!html) html = '<div class="empty-state">' + translations[currentLang].nothingFound + '</div>';
+        document.getElementById('dialogsList').innerHTML = html;
+    } catch (e) { showToast('Ошибка поиска'); }
+}
+
+async function openPrivateChat(uid, uname) {
+    currentDialog = { id: uid, type: 'user', name: uname };
+    let { data: u } = await sb.from('users').select('avatar_url,username').eq('user_id', uid).single();
+    let av = u?.avatar_url || null;
+    currentDialog.avatar = av;
+    let dname = u?.username || uname;
+    let msgs = await loadPrivateMessages(uid);
+    let messagesHtml = '';
+    for (let m of msgs) {
+        let isMy = m.from_user_id === currentUser.id;
+        let time = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        messagesHtml += `
+            <div class="private-message ${isMy ? 'my-message' : 'other-message'}">
+                <div class="message-row">
+                    ${!isMy ? `<img class="message-avatar" src="${getAvatarUrl(av, dname)}">` : ''}
+                    <div class="message-bubble">
+                        <div class="message-text">${escapeHtml(m.content)}</div>
+                        <div class="message-date">${time}</div>
+                    </div>
+                    ${isMy ? `<img class="message-avatar" src="${getAvatarUrl(currentUser.avatar, currentUser.displayName)}">` : ''}
+                </div>
+            </div>
+        `;
+    }
+    document.getElementById('chatPanel').innerHTML = `
+        <div class="chat-header">
+            <button class="menu-toggle" onclick="event.stopPropagation();document.getElementById('sidebar').classList.toggle('open')">☰</button>
+            <img class="chat-header-avatar" src="${getAvatarUrl(av, dname)}">
+            <div class="chat-header-info">
+                <div class="chat-header-name">${escapeHtml(dname)}</div>
+                <div class="chat-header-type">${translations[currentLang].user}</div>
+            </div>
+            <div class="chat-header-actions">
+                <button class="icon-btn danger" onclick="deleteChat('${uid}','${escapeHtml(dname)}')">🗑</button>
+            </div>
+        </div>
+        <div class="messages-container" id="messagesContainer">${messagesHtml}</div>
+        <div class="input-area">
+            <div class="input-wrapper">
+                <input type="text" id="privateMessageInput" placeholder="${translations[currentLang].writeMessage}" onkeypress="if(event.key==='Enter') sendPrivateMessage('${uid}')">
+                <button class="send-btn" onclick="sendPrivateMessage('${uid}')">→</button>
+            </div>
+        </div>
+    `;
+    let inp = document.getElementById('privateMessageInput');
+    if (inp) inp.focus();
+    let cont = document.getElementById('messagesContainer');
+    if (cont) cont.scrollTop = cont.scrollHeight;
+}
+
+async function sendPrivateMessage(toId) {
+    let inp = document.getElementById('privateMessageInput');
+    let content = inp.value.trim();
+    if (!content) { showToast(translations[currentLang].writeMessage); return; }
+    try {
+        let messageData = {
+            from_user_id: currentUser.id,
+            to_user_id: toId,
+            content: content,
+            created_at: new Date().toISOString()
+        };
+        let { data, error } = await sb.from('private_messages').insert(messageData).select();
+        if (error) throw error;
+        inp.value = '';
+        showToast(translations[currentLang].messageSent);
+        if (data && data[0]) addMessageToChat(data[0]);
+        loadDialogs();
+    } catch (e) {
+        showToast(translations[currentLang].failedToSend + ': ' + e.message);
+    }
+}
+
+function openCreateChannel() { document.getElementById('createChannelModal').classList.add('active'); }
+function closeCreateChannel() { document.getElementById('createChannelModal').classList.remove('active'); }
+
+async function createChannel() {
+    let name = document.getElementById('channelName').value.trim();
+    let uname = document.getElementById('channelUsername').value.trim().toLowerCase();
+    let desc = document.getElementById('channelDesc').value.trim();
+    if (!name) { showToast('Введите название'); return; }
+    if (!uname) { showToast('Введите @username'); return; }
+    try {
+        showProgress(30);
+        let { data, error } = await sb.from('channels').insert([{ name: name, channel_username: uname, description: desc, created_by: currentUser.id, has_chat: true, has_comments: true }]).select();
+        if (error) throw error;
+        let cid = data[0].id;
+        await sb.from('channel_subscriptions').insert([{ channel_id: cid, user_id: currentUser.id }]);
+        showProgress(100);
+        showToast('Канал создан!');
+        closeCreateChannel();
+    } catch (e) { showToast('Ошибка: ' + e.message); showProgress(100); }
+}
+
+async function checkAutoLogin() {
+    let uid = localStorage.getItem('xschat_user_id');
+    if (uid) {
+        try {
+            let { data: u } = await sb.from('users_auth').select('*').eq('user_id', uid).maybeSingle();
+            if (u) { await completeLogin(u); return; }
+        } catch (e) { }
+    }
+    document.getElementById('authContainer').style.display = 'flex';
+    showLogin();
+    updateUILanguage();
+}
+
+checkAutoLogin();
+</script>
+</body>
+</html>
